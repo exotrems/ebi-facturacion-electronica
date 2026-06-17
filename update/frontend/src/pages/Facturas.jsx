@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
-import api from '../services/api.service.js';
+import api from '../service/api.service.js';
 import { toast } from 'react-hot-toast';
 import { 
   Eye, 
