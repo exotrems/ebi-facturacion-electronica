@@ -1,0 +1,57 @@
+{
+  "name": "ebi-facturacion-backend",
+  "version": "1.0.0",
+  "description": "Backend para Facturación Electrónica EBI - Panamá",
+  "main": "src/server.js",
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "test": "jest --coverage",
+    "lint": "eslint src/",
+    "db:init": "node src/database/init.js",
+    "db:seed": "node src/database/seed.js"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "cors": "^2.8.5",
+    "helmet": "^8.1.0",
+    "morgan": "^1.10.0",
+    "dotenv": "^16.5.0",
+    "sqlite3": "^5.1.7",
+    "better-sqlite3": "^12.1.0",
+    "soap": "^1.1.10",
+    "xml2js": "^0.6.2",
+    "fast-xml-parser": "^5.2.1",
+    "uuid": "^11.1.0",
+    "joi": "^17.13.3",
+    "bcryptjs": "^3.0.2",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^1.4.5-lts.2",
+    "express-rate-limit": "^7.5.0",
+    "winston": "^3.17.0",
+    "express-validator": "^7.2.1",
+    "compression": "^1.8.0",
+    "node-cron": "^3.0.3",
+    "axios": "^1.9.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.10",
+    "jest": "^30.0.5",
+    "supertest": "^7.1.1",
+    "eslint": "^9.30.0",
+    "@eslint/js": "^9.30.0"
+  },
+  "keywords": [
+    "ebi",
+    "facturacion-electronica",
+    "panama",
+    "dgi",
+    "soap"
+  ],
+  "author": "",
+  "license": "MIT"
+}
