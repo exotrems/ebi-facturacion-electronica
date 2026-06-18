@@ -12,6 +12,34 @@ function safeNumber(value, defaultValue = 0) {
   return num;
 }
 
+/**
+ * Normaliza cualquier fecha a formato ISO completo (YYYY-MM-DDTHH:mm:ss.sssZ)
+ * para guardar consistentemente en la base de datos.
+ */
+function normalizarFechaISO(fechaStr) {
+  if (!fechaStr) return null;
+
+  // Si ya es formato ISO completo, devolver tal cual
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(fechaStr)) {
+    return fechaStr;
+  }
+
+  // Si es YYYY-MM-DD, convertir a ISO completo (mediodia UTC)
+  if (/^\d{4}-\d{2}-\d{2}$/.test(fechaStr)) {
+    return `${fechaStr}T12:00:00.000Z`;
+  }
+
+  // Si es otro formato, intentar extraer YYYY-MM-DD
+  if (typeof fechaStr === 'string') {
+    const match = fechaStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) {
+      return `${match[1]}-${match[2]}-${match[3]}T12:00:00.000Z`;
+    }
+  }
+
+  return fechaStr;
+}
+
 export class FacturaModel {
   static create(facturaData) {
     const db = getDatabase();
@@ -23,8 +51,9 @@ export class FacturaModel {
       codigo_sucursal_emisor: safeValue(facturaData.codigo_sucursal_emisor, '0000'),
       tipo_emision: safeValue(facturaData.tipo_emision, '01'),
       tipo_documento: safeValue(facturaData.tipo_documento, '08'),
-      fecha_emision: safeValue(facturaData.fecha_emision, new Date().toISOString()),
-      fecha_salida: safeValue(facturaData.fecha_salida, facturaData.fecha_emision || new Date().toISOString()),
+      // CORREGIDO: Normalizar fechas a ISO completo al crear
+      fecha_emision: normalizarFechaISO(safeValue(facturaData.fecha_emision, new Date().toISOString())),
+      fecha_salida: normalizarFechaISO(safeValue(facturaData.fecha_salida, facturaData.fecha_emision || new Date().toISOString())),
       naturaleza_operacion: safeValue(facturaData.naturaleza_operacion, '01'),
       tipo_operacion: safeValue(facturaData.tipo_operacion, '1'),
       destino_operacion: safeValue(facturaData.destino_operacion, '1'),
@@ -97,18 +126,35 @@ export class FacturaModel {
   }
 
   // ============================================================
-  // CORREGIDO: Usar date() de SQLite para comparar fechas ISO
+  // CORREGIDO: Filtro de fechas con substr() en vez de date()
   // ============================================================
   static findByDateRange(fechaDesde, fechaHasta, limit = 100, offset = 0) {
     const db = getDatabase();
-    // date(fecha_emision) extrae YYYY-MM-DD del string ISO
-    // Asi funciona con cualquier formato: 2026-06-18 o 2026-06-18T16:36:45.534Z
-    return db.prepare(`
+
+    // Validar que lleguen fechas válidas en formato YYYY-MM-DD
+    const fechaRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!fechaDesde || !fechaHasta) {
+      logger.warn(`findByDateRange: fechas vacías. Desde=${fechaDesde}, Hasta=${fechaHasta}`);
+      return [];
+    }
+    if (!fechaRegex.test(fechaDesde) || !fechaRegex.test(fechaHasta)) {
+      logger.warn(`findByDateRange: formato inválido. Desde=${fechaDesde}, Hasta=${fechaHasta}`);
+      return [];
+    }
+
+    logger.info(`findByDateRange SQL: substr(fecha_emision,1,10) >= '${fechaDesde}' AND <= '${fechaHasta}'`);
+
+    // substr(fecha_emision, 1, 10) extrae YYYY-MM-DD del string ISO guardado
+    // Ej: '2026-06-18T12:00:00.000Z' -> '2026-06-18'
+    const result = db.prepare(`
       SELECT * FROM facturas
-      WHERE date(fecha_emision) >= date(?) AND date(fecha_emision) <= date(?)
+      WHERE substr(fecha_emision, 1, 10) >= ? AND substr(fecha_emision, 1, 10) <= ?
       ORDER BY fecha_emision DESC, created_at DESC
       LIMIT ? OFFSET ?
     `).all(fechaDesde, fechaHasta, limit, offset);
+
+    logger.info(`findByDateRange: ${result.length} facturas encontradas`);
+    return result;
   }
 
   static update(id, updates) {

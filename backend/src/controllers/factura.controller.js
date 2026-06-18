@@ -62,10 +62,20 @@ export const FacturaController = {
       let facturas;
 
       if (fecha_desde && fecha_hasta) {
-        // Filtrar por rango de fechas
+        // ============================================================
+        // CORREGIDO: Extraer solo YYYY-MM-DD de las fechas recibidas
+        // El input type="date" del frontend envía "2026-06-18"
+        // Pero si viene como ISO completo, también extraemos la fecha
+        // ============================================================
+        const desde = fecha_desde.toString().substring(0, 10);
+        const hasta = fecha_hasta.toString().substring(0, 10);
+
+        logger.info(`Filtro fechas recibidas: desde=${fecha_desde}, hasta=${fecha_hasta}`);
+        logger.info(`Filtro fechas normalizadas: desde=${desde}, hasta=${hasta}`);
+
         facturas = FacturaModel.findByDateRange(
-          fecha_desde,
-          fecha_hasta,
+          desde,
+          hasta,
           parseInt(limit),
           parseInt(offset)
         );
