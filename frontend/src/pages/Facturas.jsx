@@ -3,30 +3,40 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../services/api.service.js';
 import { toast } from 'react-hot-toast';
-import { 
-  Eye, 
-  Trash2, 
-  Send, 
-  Search, 
-  Download, 
-  Mail, 
-  Ban, 
+import {
+  Eye,
+  Trash2,
+  Send,
+  Search,
+  Download,
+  Mail,
+  Ban,
   FileText,
-  Pencil
+  Pencil,
+  Calendar,
+  X
 } from 'lucide-react';
 
 export default function Facturas() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [filtro, setFiltro] = useState('');
+  const [filtroTexto, setFiltroTexto] = useState('');
+  const [fechaDesde, setFechaDesde] = useState('');
+  const [fechaHasta, setFechaHasta] = useState('');
+  const [mostrarFiltros, setMostrarFiltros] = useState(false);
   const [modalAnular, setModalAnular] = useState({ open: false, factura: null });
   const [modalCorreo, setModalCorreo] = useState({ open: false, factura: null });
   const [motivoAnulacion, setMotivoAnulacion] = useState('');
   const [correoDestino, setCorreoDestino] = useState('');
 
+  // Construir params para la query del backend (SOLO fechas)
+  const queryParams = {};
+  if (fechaDesde) queryParams.fecha_desde = fechaDesde;
+  if (fechaHasta) queryParams.fecha_hasta = fechaHasta;
+
   const { data: facturas, isLoading } = useQuery({
-    queryKey: ['facturas'],
-    queryFn: () => api.get('/facturas').then(r => r.data),
+    queryKey: ['facturas', queryParams],
+    queryFn: () => api.get('/facturas', { params: queryParams }).then(r => r.data),
   });
 
   const enviarEBI = useMutation({
@@ -94,10 +104,25 @@ export default function Facturas() {
     }
   };
 
-  const facturasFiltradas = facturas?.data?.filter(f => 
-    f.numero_documento_fiscal?.toLowerCase().includes(filtro.toLowerCase()) ||
-    f.cliente_razon_social?.toLowerCase().includes(filtro.toLowerCase())
-  ) || [];
+  const limpiarFiltrosFecha = () => {
+    setFechaDesde('');
+    setFechaHasta('');
+  };
+
+  const limpiarFiltroTexto = () => {
+    setFiltroTexto('');
+  };
+
+  // Filtrado local por texto (numero o cliente) sobre los resultados del backend
+  // Esto funciona INDEPENDIENTEMENTE de los filtros de fecha
+  const facturasFiltradas = facturas?.data?.filter(f => {
+    if (!filtroTexto) return true; // Si no hay texto, mostrar todo
+    const texto = filtroTexto.toLowerCase();
+    return (
+      f.numero_documento_fiscal?.toLowerCase().includes(texto) ||
+      f.cliente_razon_social?.toLowerCase().includes(texto)
+    );
+  }) || [];
 
   const getEstadoBadge = (estado, enviada) => {
     if (estado === 'ANULADA') return <span className="px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-700">ANULADA</span>;
@@ -119,7 +144,7 @@ export default function Facturas() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Facturas</h1>
-          <p className="text-sm text-slate-500 mt-1">Gestione sus facturas electrónicas EBI</p>
+          <p className="text-sm text-slate-500 mt-1">Gestione sus facturas electronicas EBI</p>
         </div>
         <Link
           to="/facturas/nueva"
@@ -130,16 +155,104 @@ export default function Facturas() {
         </Link>
       </div>
 
-      {/* Filtro */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-        <input
-          type="text"
-          placeholder="Buscar por numero o cliente..."
-          value={filtro}
-          onChange={(e) => setFiltro(e.target.value)}
-          className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-        />
+      {/* Filtros */}
+      <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm space-y-4">
+        {/* Fila 1: Busqueda por texto + toggle filtros fecha */}
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+            <input
+              type="text"
+              placeholder="Buscar por numero o cliente..."
+              value={filtroTexto}
+              onChange={(e) => setFiltroTexto(e.target.value)}
+              className="w-full pl-10 pr-10 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+            {filtroTexto && (
+              <button
+                onClick={limpiarFiltroTexto}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+              >
+                <X size={16} />
+              </button>
+            )}
+          </div>
+          <button
+            onClick={() => setMostrarFiltros(!mostrarFiltros)}
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              mostrarFiltros || fechaDesde || fechaHasta
+                ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            }`}
+          >
+            <Calendar size={16} />
+            {mostrarFiltros || fechaDesde || fechaHasta ? 'Ocultar filtros' : 'Filtros fecha'}
+            {(fechaDesde || fechaHasta) && (
+              <span className="ml-1 px-1.5 py-0.5 bg-blue-600 text-white text-xs rounded-full">!</span>
+            )}
+          </button>
+        </div>
+
+        {/* Fila 2: Filtros de fecha (colapsables) */}
+        {mostrarFiltros && (
+          <div className="flex flex-col sm:flex-row gap-3 items-end pt-2 border-t border-slate-100">
+            <div className="flex-1">
+              <label className="block text-xs font-medium text-slate-500 mb-1">Fecha desde</label>
+              <input
+                type="date"
+                value={fechaDesde}
+                onChange={(e) => setFechaDesde(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div className="flex-1">
+              <label className="block text-xs font-medium text-slate-500 mb-1">Fecha hasta</label>
+              <input
+                type="date"
+                value={fechaHasta}
+                onChange={(e) => setFechaHasta(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <button
+              onClick={limpiarFiltrosFecha}
+              className="px-4 py-2 text-sm text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors inline-flex items-center gap-1"
+            >
+              <X size={14} />
+              Limpiar fechas
+            </button>
+          </div>
+        )}
+
+        {/* Badge de filtros activos (cuando esta colapsado) */}
+        {!mostrarFiltros && (fechaDesde || fechaHasta) && (
+          <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
+            <span className="text-xs text-slate-500">Filtros activos:</span>
+            {fechaDesde && (
+              <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 text-xs rounded-md">
+                Desde: {new Date(fechaDesde + 'T00:00:00').toLocaleDateString('es-PA')}
+              </span>
+            )}
+            {fechaHasta && (
+              <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 text-xs rounded-md">
+                Hasta: {new Date(fechaHasta + 'T00:00:00').toLocaleDateString('es-PA')}
+              </span>
+            )}
+            <button
+              onClick={limpiarFiltrosFecha}
+              className="text-xs text-red-500 hover:text-red-700 underline ml-2"
+            >
+              Quitar filtros fecha
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Resultados */}
+      <div className="text-sm text-slate-500">
+        Mostrando {facturasFiltradas.length} factura{facturasFiltradas.length !== 1 ? 's' : ''}
+        {filtroTexto && <span className="ml-1">(filtrado por texto)</span>}
+        {(fechaDesde || fechaHasta) && <span className="ml-1">(filtrado por fecha)</span>}
       </div>
 
       {/* Tabla */}
@@ -244,7 +357,6 @@ export default function Facturas() {
                         >
                           <Eye size={16} />
                         </Link>
-                        {/* BOTON EDITAR - NUEVO */}
                         {!factura.enviada && factura.estado !== 'ANULADA' && (
                           <button
                             title="Editar Factura"

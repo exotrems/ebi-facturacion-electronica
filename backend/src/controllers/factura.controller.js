@@ -14,6 +14,24 @@ function safeNumber(value, defaultValue = 0) {
   return num;
 }
 
+// Helper para normalizar fechas recibidas del frontend
+// El frontend envia YYYY-MM-DD, pero a veces llega como ISO completo
+function normalizarFecha(fechaStr) {
+  if (!fechaStr) return null;
+  // Si ya es formato YYYY-MM-DD, devolver tal cual
+  if (/^\d{4}-\d{2}-\d{2}$/.test(fechaStr)) {
+    return fechaStr;
+  }
+  // Si es ISO completo, extraer solo la parte de fecha
+  if (typeof fechaStr === 'string') {
+    const match = fechaStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) {
+      return `${match[1]}-${match[2]}-${match[3]}`;
+    }
+  }
+  return fechaStr;
+}
+
 export const FacturaController = {
   // Crear nueva factura
   async crear(req, res, next) {

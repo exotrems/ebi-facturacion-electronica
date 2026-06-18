@@ -41,7 +41,6 @@ export const clienteService = {
   crear: (data) => api.post('/clientes', data),
   listar: () => api.get('/clientes'),
   obtener: (id) => api.get(`/clientes/${id}`),
-  obtenerPorRuc: (ruc) => api.get(`/clientes/buscar-ruc/${ruc}`),
   actualizar: (id, data) => api.put(`/clientes/${id}`, data),
   eliminar: (id) => api.delete(`/clientes/${id}`),
   consultarRucDV: (tipoRuc, ruc) => api.post('/clientes/consultar-ruc', { tipoRuc, ruc })

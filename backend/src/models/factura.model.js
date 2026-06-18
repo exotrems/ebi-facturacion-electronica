@@ -96,6 +96,16 @@ export class FacturaModel {
     return db.prepare('SELECT * FROM facturas WHERE numero_documento_fiscal = ?').get(numeroDocumentoFiscal);
   }
 
+  static findByDateRange(fechaDesde, fechaHasta, limit = 100, offset = 0) {
+    const db = getDatabase();
+    return db.prepare(`
+      SELECT * FROM facturas
+      WHERE fecha_emision >= ? AND fecha_emision <= ?
+      ORDER BY fecha_emision DESC, created_at DESC
+      LIMIT ? OFFSET ?
+    `).all(fechaDesde, fechaHasta, limit, offset);
+  }
+
   static update(id, updates) {
     const db = getDatabase();
     const fields = Object.keys(updates).map(key => `${key} = ?`).join(', ');
@@ -220,11 +230,6 @@ export class FacturaFormaPagoModel {
   static findByFacturaId(facturaId) {
     const db = getDatabase();
     return db.prepare('SELECT * FROM factura_formas_pago WHERE factura_id = ?').all(facturaId);
-  }
-
-  static deleteByFacturaId(facturaId) {
-    const db = getDatabase();
-    return db.prepare('DELETE FROM factura_formas_pago WHERE factura_id = ?').run(facturaId);
   }
 }
 

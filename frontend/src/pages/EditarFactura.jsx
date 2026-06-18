@@ -38,9 +38,19 @@ const safeNumber = (val, defaultVal = 0) => {
 };
 
 // Helper para formatear fecha ISO a yyyy-MM-dd para inputs date
+// IMPORTANTE: Extrae directamente del string ISO para evitar offset de zona horaria
 const formatDateForInput = (isoDate) => {
   if (!isoDate) return '';
   try {
+    // Si es un string ISO (ej: "2025-06-15T00:00:00.000Z" o "2025-06-15")
+    // Extraemos solo la parte de fecha (YYYY-MM-DD) directamente del string
+    if (typeof isoDate === 'string') {
+      const match = isoDate.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (match) {
+        return `${match[1]}-${match[2]}-${match[3]}`;
+      }
+    }
+    // Fallback: usar Date (puede tener problemas de zona horaria)
     const date = new Date(isoDate);
     if (isNaN(date.getTime())) return '';
     const year = date.getFullYear();
@@ -253,7 +263,7 @@ export default function EditarFactura() {
     if (cliente) {
       setFormData(prev => ({
         ...prev,
-        cliente_id: Number(cliente.id),
+        cliente_id: cliente.id,
         cliente_tipo_cliente_fe: safeValue(cliente.tipo_cliente_fe, '02'),
         cliente_tipo_contribuyente: safeValue(cliente.tipo_contribuyente),
         cliente_numero_ruc: safeValue(cliente.numero_ruc),
@@ -423,7 +433,6 @@ export default function EditarFactura() {
 
     const payload = {
       ...formData,
-      cliente_id: formData.cliente_id ? Number(formData.cliente_id) : null,
       items: items.map(({ id, ...rest }) => rest),
       formas_pago: formasPago.map(({ id, ...rest }) => rest),
     };
