@@ -47,11 +47,25 @@ export const FacturaController = {
     }
   },
 
-  // Obtener todas las facturas
+  // Obtener todas las facturas (con filtro opcional por fecha)
   async listar(req, res, next) {
     try {
-      const { limit = 100, offset = 0 } = req.query;
-      const facturas = FacturaModel.findAll(parseInt(limit), parseInt(offset));
+      const { limit = 100, offset = 0, fecha_desde, fecha_hasta } = req.query;
+      let facturas;
+
+      if (fecha_desde && fecha_hasta) {
+        // Filtrar por rango de fechas
+        facturas = FacturaModel.findByDateRange(
+          fecha_desde,
+          fecha_hasta,
+          parseInt(limit),
+          parseInt(offset)
+        );
+      } else {
+        // Listar todas
+        facturas = FacturaModel.findAll(parseInt(limit), parseInt(offset));
+      }
+
       res.json({
         success: true,
         count: facturas.length,
@@ -118,8 +132,8 @@ export const FacturaController = {
         codigo_sucursal_emisor: safeValue(facturaData.codigo_sucursal_emisor, factura.codigo_sucursal_emisor),
         tipo_emision: safeValue(facturaData.tipo_emision, factura.tipo_emision),
         tipo_documento: safeValue(facturaData.tipo_documento, factura.tipo_documento),
-        fecha_emision: safeValue(facturaData.fecha_emision, factura.fecha_emision),
-        fecha_salida: safeValue(facturaData.fecha_salida, factura.fecha_salida),
+        fecha_emision: normalizarFecha(safeValue(facturaData.fecha_emision, factura.fecha_emision)),
+        fecha_salida: normalizarFecha(safeValue(facturaData.fecha_salida, factura.fecha_salida)),
         naturaleza_operacion: safeValue(facturaData.naturaleza_operacion, factura.naturaleza_operacion),
         tipo_operacion: safeValue(facturaData.tipo_operacion, factura.tipo_operacion),
         destino_operacion: safeValue(facturaData.destino_operacion, factura.destino_operacion),

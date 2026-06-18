@@ -17,6 +17,23 @@ import {
   X
 } from 'lucide-react';
 
+// Helper para formatear fecha SIN offset de zona horaria
+// Extrae directamente YYYY-MM-DD del string ISO
+function formatDateDisplay(isoDate) {
+  if (!isoDate) return 'N/A';
+  if (typeof isoDate === 'string') {
+    const match = isoDate.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) {
+      const [_, year, month, day] = match;
+      return `${day}/${month}/${year}`;
+    }
+  }
+  // Fallback (puede tener offset)
+  const d = new Date(isoDate);
+  if (isNaN(d.getTime())) return 'N/A';
+  return d.toLocaleDateString('es-PA');
+}
+
 export default function Facturas() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -116,7 +133,7 @@ export default function Facturas() {
   // Filtrado local por texto (numero o cliente) sobre los resultados del backend
   // Esto funciona INDEPENDIENTEMENTE de los filtros de fecha
   const facturasFiltradas = facturas?.data?.filter(f => {
-    if (!filtroTexto) return true; // Si no hay texto, mostrar todo
+    if (!filtroTexto) return true; // Sin texto = mostrar todo
     const texto = filtroTexto.toLowerCase();
     return (
       f.numero_documento_fiscal?.toLowerCase().includes(texto) ||
@@ -230,12 +247,12 @@ export default function Facturas() {
             <span className="text-xs text-slate-500">Filtros activos:</span>
             {fechaDesde && (
               <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 text-xs rounded-md">
-                Desde: {new Date(fechaDesde + 'T00:00:00').toLocaleDateString('es-PA')}
+                Desde: {fechaDesde}
               </span>
             )}
             {fechaHasta && (
               <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 text-xs rounded-md">
-                Hasta: {new Date(fechaHasta + 'T00:00:00').toLocaleDateString('es-PA')}
+                Hasta: {fechaHasta}
               </span>
             )}
             <button
@@ -287,7 +304,7 @@ export default function Facturas() {
                       {factura.cliente_razon_social || 'N/A'}
                     </td>
                     <td className="px-4 py-3 text-slate-600">
-                      {new Date(factura.fecha_emision).toLocaleDateString('es-PA')}
+                      {formatDateDisplay(factura.fecha_emision)}
                     </td>
                     <td className="px-4 py-3 text-right font-medium text-slate-900">
                       ${parseFloat(factura.total_factura).toFixed(2)}
