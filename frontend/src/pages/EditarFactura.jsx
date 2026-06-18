@@ -63,6 +63,31 @@ const formatDateForInput = (isoDate) => {
   }
 };
 
+// ============================================================
+// NUEVO: Helper para convertir YYYY-MM-DD a ISO completo
+// ============================================================
+const formatDateForAPI = (dateInput) => {
+  if (!dateInput) return '';
+
+  // Si ya es ISO completo, devolver tal cual
+  if (typeof dateInput === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(dateInput)) {
+    return dateInput;
+  }
+
+  // Si es YYYY-MM-DD, convertir a ISO completo
+  if (typeof dateInput === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateInput)) {
+    return `${dateInput}T12:00:00.000Z`;
+  }
+
+  // Intentar extraer fecha
+  const match = String(dateInput).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (match) {
+    return `${match[1]}-${match[2]}-${match[3]}T12:00:00.000Z`;
+  }
+
+  return dateInput;
+};
+
 export default function EditarFactura() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -137,7 +162,7 @@ export default function EditarFactura() {
         codigo_sucursal_emisor: safeValue(factura.codigo_sucursal_emisor, '0000'),
         tipo_emision: safeValue(factura.tipo_emision, '01'),
         tipo_documento: safeValue(factura.tipo_documento, '08'),
-        // CORREGIDO: Formatear fechas ISO a yyyy-MM-dd
+        // CORREGIDO: Formatear fechas ISO a yyyy-MM-dd para el input
         fecha_emision: formatDateForInput(factura.fecha_emision),
         fecha_salida: formatDateForInput(factura.fecha_salida),
         naturaleza_operacion: safeValue(factura.naturaleza_operacion, '01'),
@@ -176,8 +201,8 @@ export default function EditarFactura() {
         vuelto: factura.vuelto === undefined || factura.vuelto === null ? factura.vuelto : safeNumber(factura.vuelto),
         tiempo_pago: safeValue(factura.tiempo_pago, '1'),
         nro_items: safeNumber(factura.nro_items, 0),
-        total_todos_items: safeNumber(factura.total_todos_items),
-        total_otros_gastos: safeNumber(factura.total_otros_gastos),
+        total_todos_items: safeNumber(factura.total_todos_items, 0),
+        total_otros_gastos: safeNumber(factura.total_otros_gastos, 0),
       }));
 
       if (factura.items && Array.isArray(factura.items)) {
@@ -432,8 +457,13 @@ export default function EditarFactura() {
 
     setIsSubmitting(true);
 
+    // ============================================================
+    // CORREGIDO: Normalizar fechas a ISO completo antes de enviar
+    // ============================================================
     const payload = {
       ...formData,
+      fecha_emision: formatDateForAPI(formData.fecha_emision),
+      fecha_salida: formatDateForAPI(formData.fecha_salida),
       items: items.map(({ id, ...rest }) => rest),
       formas_pago: formasPago.map(({ id, ...rest }) => rest),
     };
