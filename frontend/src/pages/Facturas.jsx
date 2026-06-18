@@ -17,45 +17,48 @@ import {
   X
 } from 'lucide-react';
 
-// Helper para formatear fecha SIN offset de zona horaria
-// Extrae directamente YYYY-MM-DD del string ISO
+// Helper: formatear fecha ISO a DD/MM/YYYY SIN offset de zona horaria
 function formatDateDisplay(isoDate) {
   if (!isoDate) return 'N/A';
   if (typeof isoDate === 'string') {
     const match = isoDate.match(/^(\d{4})-(\d{2})-(\d{2})/);
     if (match) {
-      const [_, year, month, day] = match;
-      return `${day}/${month}/${year}`;
+      return `${match[3]}/${match[2]}/${match[1]}`;
     }
   }
-  // Fallback (puede tener offset)
-  const d = new Date(isoDate);
-  if (isNaN(d.getTime())) return 'N/A';
-  return d.toLocaleDateString('es-PA');
+  return isoDate;
 }
 
 export default function Facturas() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+
+  // === ESTADOS DE FILTROS ===
   const [filtroTexto, setFiltroTexto] = useState('');
   const [fechaDesde, setFechaDesde] = useState('');
   const [fechaHasta, setFechaHasta] = useState('');
-  const [mostrarFiltros, setMostrarFiltros] = useState(false);
+  const [mostrarFiltrosFecha, setMostrarFiltrosFecha] = useState(false);
+
+  // === MODALES ===
   const [modalAnular, setModalAnular] = useState({ open: false, factura: null });
   const [modalCorreo, setModalCorreo] = useState({ open: false, factura: null });
   const [motivoAnulacion, setMotivoAnulacion] = useState('');
   const [correoDestino, setCorreoDestino] = useState('');
 
-  // Construir params para la query del backend (SOLO fechas)
+  // === QUERY CON FILTROS DE FECHA ===
+  // Construir params para enviar al backend
   const queryParams = {};
   if (fechaDesde) queryParams.fecha_desde = fechaDesde;
   if (fechaHasta) queryParams.fecha_hasta = fechaHasta;
 
-  const { data: facturas, isLoading } = useQuery({
+  const { data: facturasResponse, isLoading } = useQuery({
     queryKey: ['facturas', queryParams],
     queryFn: () => api.get('/facturas', { params: queryParams }).then(r => r.data),
   });
 
+  const facturas = facturasResponse?.data || [];
+
+  // === MUTACIONES ===
   const enviarEBI = useMutation({
     mutationFn: (id) => api.post(`/facturas/${id}/enviar`),
     onSuccess: () => {
@@ -121,25 +124,15 @@ export default function Facturas() {
     }
   };
 
-  const limpiarFiltrosFecha = () => {
-    setFechaDesde('');
-    setFechaHasta('');
-  };
-
-  const limpiarFiltroTexto = () => {
-    setFiltroTexto('');
-  };
-
-  // Filtrado local por texto (numero o cliente) sobre los resultados del backend
-  // Esto funciona INDEPENDIENTEMENTE de los filtros de fecha
-  const facturasFiltradas = facturas?.data?.filter(f => {
-    if (!filtroTexto) return true; // Sin texto = mostrar todo
+  // === FILTRADO LOCAL POR TEXTO ===
+  const facturasFiltradas = facturas.filter(f => {
+    if (!filtroTexto) return true;
     const texto = filtroTexto.toLowerCase();
     return (
       f.numero_documento_fiscal?.toLowerCase().includes(texto) ||
       f.cliente_razon_social?.toLowerCase().includes(texto)
     );
-  }) || [];
+  });
 
   const getEstadoBadge = (estado, enviada) => {
     if (estado === 'ANULADA') return <span className="px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-700">ANULADA</span>;
@@ -172,7 +165,7 @@ export default function Facturas() {
         </Link>
       </div>
 
-      {/* Filtros */}
+      {/* === PANEL DE FILTROS === */}
       <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm space-y-4">
         {/* Fila 1: Busqueda por texto + toggle filtros fecha */}
         <div className="flex flex-col sm:flex-row gap-3">
@@ -187,7 +180,7 @@ export default function Facturas() {
             />
             {filtroTexto && (
               <button
-                onClick={limpiarFiltroTexto}
+                onClick={() => setFiltroTexto('')}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
               >
                 <X size={16} />
@@ -195,23 +188,23 @@ export default function Facturas() {
             )}
           </div>
           <button
-            onClick={() => setMostrarFiltros(!mostrarFiltros)}
+            onClick={() => setMostrarFiltrosFecha(!mostrarFiltrosFecha)}
             className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              mostrarFiltros || fechaDesde || fechaHasta
+              mostrarFiltrosFecha || fechaDesde || fechaHasta
                 ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
                 : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
             }`}
           >
             <Calendar size={16} />
-            {mostrarFiltros || fechaDesde || fechaHasta ? 'Ocultar filtros' : 'Filtros fecha'}
+            {mostrarFiltrosFecha || fechaDesde || fechaHasta ? 'Ocultar filtros' : 'Filtros fecha'}
             {(fechaDesde || fechaHasta) && (
               <span className="ml-1 px-1.5 py-0.5 bg-blue-600 text-white text-xs rounded-full">!</span>
             )}
           </button>
         </div>
 
-        {/* Fila 2: Filtros de fecha (colapsables) */}
-        {mostrarFiltros && (
+        {/* Fila 2: Inputs de fecha (colapsables) */}
+        {mostrarFiltrosFecha && (
           <div className="flex flex-col sm:flex-row gap-3 items-end pt-2 border-t border-slate-100">
             <div className="flex-1">
               <label className="block text-xs font-medium text-slate-500 mb-1">Fecha desde</label>
@@ -232,7 +225,7 @@ export default function Facturas() {
               />
             </div>
             <button
-              onClick={limpiarFiltrosFecha}
+              onClick={() => { setFechaDesde(''); setFechaHasta(''); }}
               className="px-4 py-2 text-sm text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors inline-flex items-center gap-1"
             >
               <X size={14} />
@@ -242,7 +235,7 @@ export default function Facturas() {
         )}
 
         {/* Badge de filtros activos (cuando esta colapsado) */}
-        {!mostrarFiltros && (fechaDesde || fechaHasta) && (
+        {!mostrarFiltrosFecha && (fechaDesde || fechaHasta) && (
           <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
             <span className="text-xs text-slate-500">Filtros activos:</span>
             {fechaDesde && (
@@ -256,7 +249,7 @@ export default function Facturas() {
               </span>
             )}
             <button
-              onClick={limpiarFiltrosFecha}
+              onClick={() => { setFechaDesde(''); setFechaHasta(''); }}
               className="text-xs text-red-500 hover:text-red-700 underline ml-2"
             >
               Quitar filtros fecha
@@ -265,9 +258,9 @@ export default function Facturas() {
         )}
       </div>
 
-      {/* Resultados */}
+      {/* Contador de resultados */}
       <div className="text-sm text-slate-500">
-        Mostrando {facturasFiltradas.length} factura{facturasFiltradas.length !== 1 ? 's' : ''}
+        Mostrando <strong>{facturasFiltradas.length}</strong> factura{facturasFiltradas.length !== 1 ? 's' : ''}
         {filtroTexto && <span className="ml-1">(filtrado por texto)</span>}
         {(fechaDesde || fechaHasta) && <span className="ml-1">(filtrado por fecha)</span>}
       </div>
@@ -312,89 +305,24 @@ export default function Facturas() {
                     <td className="px-4 py-3 text-center">
                       {getEstadoBadge(factura.estado, factura.enviada)}
                     </td>
-                    {/* Acciones EBI */}
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-center gap-1">
-                        <button
-                          title="Enviar a EBI"
-                          onClick={() => enviarEBI.mutate(factura.id)}
-                          disabled={factura.enviada || factura.estado === 'ANULADA'}
-                          className="p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 disabled:text-slate-300 disabled:hover:bg-transparent transition-colors"
-                        >
-                          <Send size={16} />
-                        </button>
-                        <button
-                          title="Consultar Estado"
-                          onClick={() => consultarEstado.mutate(factura.id)}
-                          className="p-1.5 rounded-lg text-slate-600 hover:bg-slate-100 transition-colors"
-                        >
-                          <Search size={16} />
-                        </button>
-                        <button
-                          title="Anular"
-                          onClick={() => setModalAnular({ open: true, factura })}
-                          disabled={!factura.enviada || factura.estado === 'ANULADA'}
-                          className="p-1.5 rounded-lg text-red-600 hover:bg-red-50 disabled:text-slate-300 disabled:hover:bg-transparent transition-colors"
-                        >
-                          <Ban size={16} />
-                        </button>
-                        <button
-                          title="Descargar XML"
-                          onClick={() => handleDownload(factura.id, 'xml')}
-                          disabled={!factura.enviada}
-                          className="p-1.5 rounded-lg text-slate-600 hover:bg-slate-100 disabled:text-slate-300 disabled:hover:bg-transparent transition-colors"
-                        >
-                          <Download size={16} />
-                        </button>
-                        <button
-                          title="Enviar por Correo"
-                          onClick={() => setModalCorreo({ open: true, factura })}
-                          disabled={!factura.enviada}
-                          className="p-1.5 rounded-lg text-slate-600 hover:bg-slate-100 disabled:text-slate-300 disabled:hover:bg-transparent transition-colors"
-                        >
-                          <Mail size={16} />
-                        </button>
-                        <button
-                          title="Descargar PDF"
-                          onClick={() => handleDownload(factura.id, 'pdf')}
-                          disabled={!factura.enviada}
-                          className="p-1.5 rounded-lg text-slate-600 hover:bg-slate-100 disabled:text-slate-300 disabled:hover:bg-transparent transition-colors"
-                        >
-                          <FileText size={16} />
-                        </button>
+                        <button title="Enviar a EBI" onClick={() => enviarEBI.mutate(factura.id)} disabled={factura.enviada || factura.estado === 'ANULADA'} className="p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 disabled:text-slate-300 disabled:hover:bg-transparent transition-colors"><Send size={16} /></button>
+                        <button title="Consultar Estado" onClick={() => consultarEstado.mutate(factura.id)} className="p-1.5 rounded-lg text-slate-600 hover:bg-slate-100 transition-colors"><Search size={16} /></button>
+                        <button title="Anular" onClick={() => setModalAnular({ open: true, factura })} disabled={!factura.enviada || factura.estado === 'ANULADA'} className="p-1.5 rounded-lg text-red-600 hover:bg-red-50 disabled:text-slate-300 disabled:hover:bg-transparent transition-colors"><Ban size={16} /></button>
+                        <button title="Descargar XML" onClick={() => handleDownload(factura.id, 'xml')} disabled={!factura.enviada} className="p-1.5 rounded-lg text-slate-600 hover:bg-slate-100 disabled:text-slate-300 disabled:hover:bg-transparent transition-colors"><Download size={16} /></button>
+                        <button title="Enviar por Correo" onClick={() => setModalCorreo({ open: true, factura })} disabled={!factura.enviada} className="p-1.5 rounded-lg text-slate-600 hover:bg-slate-100 disabled:text-slate-300 disabled:hover:bg-transparent transition-colors"><Mail size={16} /></button>
+                        <button title="Descargar PDF" onClick={() => handleDownload(factura.id, 'pdf')} disabled={!factura.enviada} className="p-1.5 rounded-lg text-slate-600 hover:bg-slate-100 disabled:text-slate-300 disabled:hover:bg-transparent transition-colors"><FileText size={16} /></button>
                       </div>
                     </td>
-                    {/* Acciones: Ver / Editar / Eliminar */}
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-center gap-1">
-                        <Link
-                          to={`/facturas/${factura.id}`}
-                          title="Ver Detalle"
-                          className="p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 transition-colors"
-                        >
-                          <Eye size={16} />
-                        </Link>
+                        <Link to={`/facturas/${factura.id}`} title="Ver Detalle" className="p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 transition-colors"><Eye size={16} /></Link>
                         {!factura.enviada && factura.estado !== 'ANULADA' && (
-                          <button
-                            title="Editar Factura"
-                            onClick={() => navigate(`/facturas/editar/${factura.id}`)}
-                            className="p-1.5 rounded-lg text-amber-600 hover:bg-amber-50 transition-colors"
-                          >
-                            <Pencil size={16} />
-                          </button>
+                          <button title="Editar Factura" onClick={() => navigate(`/facturas/editar/${factura.id}`)} className="p-1.5 rounded-lg text-amber-600 hover:bg-amber-50 transition-colors"><Pencil size={16} /></button>
                         )}
                         {!factura.enviada && (
-                          <button
-                            title="Eliminar"
-                            onClick={() => {
-                              if (window.confirm('Esta seguro de eliminar esta factura?')) {
-                                eliminarFactura.mutate(factura.id);
-                              }
-                            }}
-                            className="p-1.5 rounded-lg text-red-600 hover:bg-red-50 transition-colors"
-                          >
-                            <Trash2 size={16} />
-                          </button>
+                          <button title="Eliminar" onClick={() => { if (window.confirm('Esta seguro de eliminar esta factura?')) { eliminarFactura.mutate(factura.id); } }} className="p-1.5 rounded-lg text-red-600 hover:bg-red-50 transition-colors"><Trash2 size={16} /></button>
                         )}
                       </div>
                     </td>
@@ -411,48 +339,15 @@ export default function Facturas() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
             <h3 className="text-lg font-semibold text-slate-900 mb-2">Anular Factura</h3>
-            <p className="text-sm text-slate-500 mb-4">
-              Factura: {modalAnular.factura?.numero_documento_fiscal}
-            </p>
+            <p className="text-sm text-slate-500 mb-4">Factura: {modalAnular.factura?.numero_documento_fiscal}</p>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Motivo de Anulacion *
-                </label>
-                <textarea
-                  value={motivoAnulacion}
-                  onChange={(e) => setMotivoAnulacion(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
-                  rows={3}
-                  placeholder="Ingrese el motivo de anulacion..."
-                />
+                <label className="block text-sm font-medium text-slate-700 mb-1">Motivo de Anulacion *</label>
+                <textarea value={motivoAnulacion} onChange={(e) => setMotivoAnulacion(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500" rows={3} placeholder="Ingrese el motivo de anulacion..." />
               </div>
               <div className="flex gap-3 justify-end">
-                <button
-                  onClick={() => {
-                    setModalAnular({ open: false, factura: null });
-                    setMotivoAnulacion('');
-                  }}
-                  className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={() => {
-                    if (!motivoAnulacion.trim()) {
-                      toast.error('El motivo de anulacion es requerido');
-                      return;
-                    }
-                    anularFactura.mutate({
-                      id: modalAnular.factura.id,
-                      motivo: motivoAnulacion,
-                    });
-                  }}
-                  disabled={anularFactura.isPending}
-                  className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors"
-                >
-                  {anularFactura.isPending ? 'Anulando...' : 'Anular'}
-                </button>
+                <button onClick={() => { setModalAnular({ open: false, factura: null }); setMotivoAnulacion(''); }} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">Cancelar</button>
+                <button onClick={() => { if (!motivoAnulacion.trim()) { toast.error('El motivo de anulacion es requerido'); return; } anularFactura.mutate({ id: modalAnular.factura.id, motivo: motivoAnulacion }); }} disabled={anularFactura.isPending} className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors">{anularFactura.isPending ? 'Anulando...' : 'Anular'}</button>
               </div>
             </div>
           </div>
@@ -464,48 +359,15 @@ export default function Facturas() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
             <h3 className="text-lg font-semibold text-slate-900 mb-2">Enviar por Correo</h3>
-            <p className="text-sm text-slate-500 mb-4">
-              Factura: {modalCorreo.factura?.numero_documento_fiscal}
-            </p>
+            <p className="text-sm text-slate-500 mb-4">Factura: {modalCorreo.factura?.numero_documento_fiscal}</p>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Correo Electronico *
-                </label>
-                <input
-                  type="email"
-                  value={correoDestino}
-                  onChange={(e) => setCorreoDestino(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
-                  placeholder="cliente@ejemplo.com"
-                />
+                <label className="block text-sm font-medium text-slate-700 mb-1">Correo Electronico *</label>
+                <input type="email" value={correoDestino} onChange={(e) => setCorreoDestino(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500" placeholder="cliente@ejemplo.com" />
               </div>
               <div className="flex gap-3 justify-end">
-                <button
-                  onClick={() => {
-                    setModalCorreo({ open: false, factura: null });
-                    setCorreoDestino('');
-                  }}
-                  className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={() => {
-                    if (!correoDestino.trim()) {
-                      toast.error('El correo es requerido');
-                      return;
-                    }
-                    enviarCorreo.mutate({
-                      id: modalCorreo.factura.id,
-                      correo: correoDestino,
-                    });
-                  }}
-                  disabled={enviarCorreo.isPending}
-                  className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
-                >
-                  {enviarCorreo.isPending ? 'Enviando...' : 'Enviar'}
-                </button>
+                <button onClick={() => { setModalCorreo({ open: false, factura: null }); setCorreoDestino(''); }} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">Cancelar</button>
+                <button onClick={() => { if (!correoDestino.trim()) { toast.error('El correo es requerido'); return; } enviarCorreo.mutate({ id: modalCorreo.factura.id, correo: correoDestino }); }} disabled={enviarCorreo.isPending} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">{enviarCorreo.isPending ? 'Enviando...' : 'Enviar'}</button>
               </div>
             </div>
           </div>
