@@ -221,6 +221,11 @@ export class FacturaFormaPagoModel {
     const db = getDatabase();
     return db.prepare('SELECT * FROM factura_formas_pago WHERE factura_id = ?').all(facturaId);
   }
+
+  static deleteByFacturaId(facturaId) {
+    const db = getDatabase();
+    return db.prepare('DELETE FROM factura_formas_pago WHERE factura_id = ?').run(facturaId);
+  }
 }
 
 export class FacturaPagoPlazoModel {

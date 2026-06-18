@@ -253,7 +253,7 @@ export default function EditarFactura() {
     if (cliente) {
       setFormData(prev => ({
         ...prev,
-        cliente_id: cliente.id,
+        cliente_id: Number(cliente.id),
         cliente_tipo_cliente_fe: safeValue(cliente.tipo_cliente_fe, '02'),
         cliente_tipo_contribuyente: safeValue(cliente.tipo_contribuyente),
         cliente_numero_ruc: safeValue(cliente.numero_ruc),
@@ -423,6 +423,7 @@ export default function EditarFactura() {
 
     const payload = {
       ...formData,
+      cliente_id: formData.cliente_id ? Number(formData.cliente_id) : null,
       items: items.map(({ id, ...rest }) => rest),
       formas_pago: formasPago.map(({ id, ...rest }) => rest),
     };

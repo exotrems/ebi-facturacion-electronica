@@ -52,6 +52,22 @@ export const ClienteController = {
   },
 
   // Consultar RUC DV vía EBI
+  async obtenerPorRuc(req, res, next) {
+    try {
+      const { ruc } = req.params;
+      if (!ruc) {
+        return res.status(400).json({ success: false, message: 'RUC es requerido' });
+      }
+      const cliente = ClienteModel.findByRuc(ruc);
+      if (!cliente) {
+        return res.status(404).json({ success: false, message: 'Cliente no encontrado con ese RUC' });
+      }
+      res.json({ success: true, data: cliente });
+    } catch (error) {
+      next(error);
+    }
+  },
+
   async consultarRucDV(req, res, next) {
     try {
       const { tipoRuc, ruc } = req.body;

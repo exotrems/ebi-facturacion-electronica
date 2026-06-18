@@ -24,6 +24,36 @@ export const useCrearCliente = () => {
   });
 };
 
+export const useActualizarCliente = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id, data }) => clienteService.actualizar(id, data).then(res => res.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['clientes'] });
+      toast.success('Cliente actualizado exitosamente');
+    },
+    onError: (error) => {
+      toast.error(error.message || 'Error al actualizar cliente');
+    }
+  });
+};
+
+export const useEliminarCliente = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (id) => clienteService.eliminar(id).then(res => res.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['clientes'] });
+      toast.success('Cliente eliminado exitosamente');
+    },
+    onError: (error) => {
+      toast.error(error.message || 'Error al eliminar cliente');
+    }
+  });
+};
+
 export const useConsultarRucDV = () => {
   return useMutation({
     mutationFn: ({ tipoRuc, ruc }) => clienteService.consultarRucDV(tipoRuc, ruc).then(res => res.data),

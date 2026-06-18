@@ -23,3 +23,33 @@ export const useCrearProducto = () => {
     }
   });
 };
+
+export const useActualizarProducto = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id, data }) => productoService.actualizar(id, data).then(res => res.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['productos'] });
+      toast.success('Producto actualizado exitosamente');
+    },
+    onError: (error) => {
+      toast.error(error.message || 'Error al actualizar producto');
+    }
+  });
+};
+
+export const useEliminarProducto = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (id) => productoService.eliminar(id).then(res => res.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['productos'] });
+      toast.success('Producto eliminado exitosamente');
+    },
+    onError: (error) => {
+      toast.error(error.message || 'Error al eliminar producto');
+    }
+  });
+};
