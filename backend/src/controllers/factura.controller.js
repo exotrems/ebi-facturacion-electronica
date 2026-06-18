@@ -15,20 +15,28 @@ function safeNumber(value, defaultValue = 0) {
 }
 
 // Helper para normalizar fechas recibidas del frontend
-// El frontend envia YYYY-MM-DD, pero a veces llega como ISO completo
-function normalizarFecha(fechaStr) {
+// Convierte cualquier formato a ISO completo (YYYY-MM-DDTHH:mm:ss.sssZ)
+function normalizarFechaISO(fechaStr) {
   if (!fechaStr) return null;
-  // Si ya es formato YYYY-MM-DD, devolver tal cual
-  if (/^\d{4}-\d{2}-\d{2}$/.test(fechaStr)) {
+
+  // Si ya es formato ISO completo, devolver tal cual
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(fechaStr)) {
     return fechaStr;
   }
-  // Si es ISO completo, extraer solo la parte de fecha
+
+  // Si es YYYY-MM-DD, convertir a ISO completo (mediodia UTC)
+  if (/^\d{4}-\d{2}-\d{2}$/.test(fechaStr)) {
+    return `${fechaStr}T12:00:00.000Z`;
+  }
+
+  // Si es otro formato, intentar convertir
   if (typeof fechaStr === 'string') {
     const match = fechaStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
     if (match) {
-      return `${match[1]}-${match[2]}-${match[3]}`;
+      return `${match[1]}-${match[2]}-${match[3]}T12:00:00.000Z`;
     }
   }
+
   return fechaStr;
 }
 
@@ -132,8 +140,9 @@ export const FacturaController = {
         codigo_sucursal_emisor: safeValue(facturaData.codigo_sucursal_emisor, factura.codigo_sucursal_emisor),
         tipo_emision: safeValue(facturaData.tipo_emision, factura.tipo_emision),
         tipo_documento: safeValue(facturaData.tipo_documento, factura.tipo_documento),
-        fecha_emision: normalizarFecha(safeValue(facturaData.fecha_emision, factura.fecha_emision)),
-        fecha_salida: normalizarFecha(safeValue(facturaData.fecha_salida, factura.fecha_salida)),
+        // CORREGIDO: Guardar fecha en formato ISO completo
+        fecha_emision: normalizarFechaISO(safeValue(facturaData.fecha_emision, factura.fecha_emision)),
+        fecha_salida: normalizarFechaISO(safeValue(facturaData.fecha_salida, factura.fecha_salida)),
         naturaleza_operacion: safeValue(facturaData.naturaleza_operacion, factura.naturaleza_operacion),
         tipo_operacion: safeValue(facturaData.tipo_operacion, factura.tipo_operacion),
         destino_operacion: safeValue(facturaData.destino_operacion, factura.destino_operacion),

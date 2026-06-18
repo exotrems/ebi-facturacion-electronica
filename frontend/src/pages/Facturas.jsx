@@ -252,7 +252,6 @@ export default function Facturas() {
               onClick={() => { setFechaDesde(''); setFechaHasta(''); }}
               className="text-xs text-red-500 hover:text-red-700 underline ml-2"
             >
-              
               Quitar filtros fecha
             </button>
           </div>
