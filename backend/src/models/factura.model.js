@@ -12,46 +12,27 @@ function safeNumber(value, defaultValue = 0) {
   return num;
 }
 
-/**
- * Normaliza cualquier fecha a formato ISO completo (YYYY-MM-DDTHH:mm:ss.sssZ)
- * para guardar consistentemente en la base de datos.
- */
-function normalizarFechaISO(fechaStr) {
-  if (!fechaStr) return null;
-
-  // Si ya es formato ISO completo, devolver tal cual
-  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(fechaStr)) {
-    return fechaStr;
-  }
-
-  // Si es YYYY-MM-DD, convertir a ISO completo (mediodia UTC)
-  if (/^\d{4}-\d{2}-\d{2}$/.test(fechaStr)) {
-    return `${fechaStr}T12:00:00.000Z`;
-  }
-
-  // Si es otro formato, intentar extraer YYYY-MM-DD
-  if (typeof fechaStr === 'string') {
-    const match = fechaStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
-    if (match) {
-      return `${match[1]}-${match[2]}-${match[3]}T12:00:00.000Z`;
-    }
-  }
-
+function normalizarFechaISO(fechaInput) {
+  if (!fechaInput) return null;
+  if (fechaInput instanceof Date) return fechaInput.toISOString();
+  const fechaStr = String(fechaInput).trim();
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(fechaStr)) return fechaStr;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(fechaStr)) return `${fechaStr}T12:00:00.000Z`;
+  const match = fechaStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (match) return `${match[1]}-${match[2]}-${match[3]}T12:00:00.000Z`;
+  try { const d = new Date(fechaStr); if (!isNaN(d.getTime())) return d.toISOString(); } catch (e) {}
   return fechaStr;
 }
 
 export class FacturaModel {
   static create(facturaData) {
     const db = getDatabase();
-
-    // Datos normalizados con valores por defecto
     const data = {
       numero_documento_fiscal: safeValue(facturaData.numero_documento_fiscal, '0000000001'),
       punto_facturacion_fiscal: safeValue(facturaData.punto_facturacion_fiscal, '001'),
       codigo_sucursal_emisor: safeValue(facturaData.codigo_sucursal_emisor, '0000'),
       tipo_emision: safeValue(facturaData.tipo_emision, '01'),
       tipo_documento: safeValue(facturaData.tipo_documento, '08'),
-      // CORREGIDO: Normalizar fechas a ISO completo al crear
       fecha_emision: normalizarFechaISO(safeValue(facturaData.fecha_emision, new Date().toISOString())),
       fecha_salida: normalizarFechaISO(safeValue(facturaData.fecha_salida, facturaData.fecha_emision || new Date().toISOString())),
       naturaleza_operacion: safeValue(facturaData.naturaleza_operacion, '01'),
@@ -97,15 +78,11 @@ export class FacturaModel {
     const columns = Object.keys(data).join(', ');
     const placeholders = Object.keys(data).map(() => '?').join(', ');
     const values = Object.values(data);
-
     const sql = `INSERT INTO facturas (${columns}) VALUES (${placeholders})`;
-
     logger.info(`SQL INSERT: ${sql.substring(0, 100)}...`);
     logger.info(`Valores: ${JSON.stringify(values).substring(0, 500)}`);
-
     const stmt = db.prepare(sql);
     const result = stmt.run(...values);
-
     logger.info(`Factura creada con ID: ${result.lastInsertRowid}`);
     return result.lastInsertRowid;
   }
@@ -125,13 +102,13 @@ export class FacturaModel {
     return db.prepare('SELECT * FROM facturas WHERE numero_documento_fiscal = ?').get(numeroDocumentoFiscal);
   }
 
-  // ============================================================
-  // CORREGIDO: Filtro de fechas con substr() en vez de date()
-  // ============================================================
   static findByDateRange(fechaDesde, fechaHasta, limit = 100, offset = 0) {
     const db = getDatabase();
 
-    // Validar que lleguen fechas válidas en formato YYYY-MM-DD
+    logger.info('========== findByDateRange ==========');
+    logger.info(`fechaDesde recibida: ${fechaDesde} (tipo: ${typeof fechaDesde})`);
+    logger.info(`fechaHasta recibida: ${fechaHasta} (tipo: ${typeof fechaHasta})`);
+
     const fechaRegex = /^\d{4}-\d{2}-\d{2}$/;
     if (!fechaDesde || !fechaHasta) {
       logger.warn(`findByDateRange: fechas vacías. Desde=${fechaDesde}, Hasta=${fechaHasta}`);
@@ -142,10 +119,12 @@ export class FacturaModel {
       return [];
     }
 
-    logger.info(`findByDateRange SQL: substr(fecha_emision,1,10) >= '${fechaDesde}' AND <= '${fechaHasta}'`);
+    // Verificar qué fechas hay en la BD
+    const sample = db.prepare('SELECT id, fecha_emision, substr(fecha_emision,1,10) as fecha_extract FROM facturas LIMIT 3').all();
+    logger.info(`Muestra fechas en BD: ${JSON.stringify(sample)}`);
 
-    // substr(fecha_emision, 1, 10) extrae YYYY-MM-DD del string ISO guardado
-    // Ej: '2026-06-18T12:00:00.000Z' -> '2026-06-18'
+    logger.info(`findByDateRange SQL: substr(fecha_emision,1,10) >= '${fechaDesde}' AND substr(fecha_emision,1,10) <= '${fechaHasta}'`);
+
     const result = db.prepare(`
       SELECT * FROM facturas
       WHERE substr(fecha_emision, 1, 10) >= ? AND substr(fecha_emision, 1, 10) <= ?
@@ -154,6 +133,7 @@ export class FacturaModel {
     `).all(fechaDesde, fechaHasta, limit, offset);
 
     logger.info(`findByDateRange: ${result.length} facturas encontradas`);
+    logger.info('=====================================');
     return result;
   }
 
@@ -161,10 +141,8 @@ export class FacturaModel {
     const db = getDatabase();
     const fields = Object.keys(updates).map(key => `${key} = ?`).join(', ');
     const values = Object.values(updates);
-
     const stmt = db.prepare(`UPDATE facturas SET ${fields}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`);
     const result = stmt.run(...values, id);
-
     logger.info(`Factura ${id} actualizada`);
     return result.changes > 0;
   }
@@ -179,33 +157,23 @@ export class FacturaModel {
   static updateEBIStatus(id, status) {
     const db = getDatabase();
     const stmt = db.prepare(`
-      UPDATE facturas SET
-        estado = ?, cufe = ?, qr = ?, fecha_recepcion_dgi = ?,
+      UPDATE facturas SET estado = ?, cufe = ?, qr = ?, fecha_recepcion_dgi = ?,
         nro_protocolo_autorizacion = ?, mensaje_ebi = ?, codigo_respuesta_ebi = ?,
         xml_enviado = ?, xml_respuesta = ?, enviada = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `);
     const result = stmt.run(
-      safeValue(status.estado, 'PENDIENTE'),
-      status.cufe || null,
-      status.qr || null,
-      status.fechaRecepcionDGI || null,
-      status.nroProtocoloAutorizacion || null,
-      status.mensaje || null,
-      status.codigo || null,
-      status.xmlEnviado || null,
-      status.xmlRespuesta || null,
-      status.enviada || 0,
-      id
+      safeValue(status.estado, 'PENDIENTE'), status.cufe || null, status.qr || null,
+      status.fechaRecepcionDGI || null, status.nroProtocoloAutorizacion || null,
+      status.mensaje || null, status.codigo || null, status.xmlEnviado || null,
+      status.xmlRespuesta || null, status.enviada || 0, id
     );
     return result.changes > 0;
   }
 
   static anular(id, motivo) {
     const db = getDatabase();
-    const result = db.prepare(`
-      UPDATE facturas SET anulada = 1, motivo_anulacion = ?, estado = 'ANULADA', updated_at = CURRENT_TIMESTAMP WHERE id = ?
-    `).run(motivo, id);
+    const result = db.prepare(`UPDATE facturas SET anulada = 1, motivo_anulacion = ?, estado = 'ANULADA', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(motivo, id);
     return result.changes > 0;
   }
 }
@@ -213,7 +181,6 @@ export class FacturaModel {
 export class FacturaItemModel {
   static create(itemData) {
     const db = getDatabase();
-
     const data = {
       factura_id: safeNumber(itemData.factura_id),
       producto_id: safeNumber(itemData.producto_id),
@@ -244,11 +211,9 @@ export class FacturaItemModel {
       tasa_oti: safeValue(itemData.tasa_oti),
       valor_tasa: safeNumber(itemData.valor_tasa)
     };
-
     const columns = Object.keys(data).join(', ');
     const placeholders = Object.keys(data).map(() => '?').join(', ');
     const values = Object.values(data);
-
     const stmt = db.prepare(`INSERT INTO factura_items (${columns}) VALUES (${placeholders})`);
     return stmt.run(...values).lastInsertRowid;
   }
@@ -267,14 +232,8 @@ export class FacturaItemModel {
 export class FacturaFormaPagoModel {
   static create(data) {
     const db = getDatabase();
-    return db.prepare(`
-      INSERT INTO factura_formas_pago (factura_id, forma_pago_fact, desc_forma_pago, valor_cuota_pagada)
-      VALUES (?, ?, ?, ?)
-    `).run(
-      safeNumber(data.factura_id),
-      safeValue(data.forma_pago_fact, '02'),
-      safeValue(data.desc_forma_pago, ''),
-      safeNumber(data.valor_cuota_pagada)
+    return db.prepare(`INSERT INTO factura_formas_pago (factura_id, forma_pago_fact, desc_forma_pago, valor_cuota_pagada) VALUES (?, ?, ?, ?)`).run(
+      safeNumber(data.factura_id), safeValue(data.forma_pago_fact, '02'), safeValue(data.desc_forma_pago, ''), safeNumber(data.valor_cuota_pagada)
     ).lastInsertRowid;
   }
 
@@ -292,14 +251,8 @@ export class FacturaFormaPagoModel {
 export class FacturaPagoPlazoModel {
   static create(data) {
     const db = getDatabase();
-    return db.prepare(`
-      INSERT INTO factura_pagos_plazo (factura_id, fecha_vence_cuota, valor_cuota, info_pago_cuota)
-      VALUES (?, ?, ?, ?)
-    `).run(
-      safeNumber(data.factura_id),
-      safeValue(data.fecha_vence_cuota),
-      safeNumber(data.valor_cuota),
-      safeValue(data.info_pago_cuota, '')
+    return db.prepare(`INSERT INTO factura_pagos_plazo (factura_id, fecha_vence_cuota, valor_cuota, info_pago_cuota) VALUES (?, ?, ?, ?)`).run(
+      safeNumber(data.factura_id), safeValue(data.fecha_vence_cuota), safeNumber(data.valor_cuota), safeValue(data.info_pago_cuota, '')
     ).lastInsertRowid;
   }
 
@@ -312,13 +265,8 @@ export class FacturaPagoPlazoModel {
 export class FacturaDescuentoModel {
   static create(data) {
     const db = getDatabase();
-    return db.prepare(`
-      INSERT INTO factura_descuentos (factura_id, desc_descuento, monto_descuento)
-      VALUES (?, ?, ?)
-    `).run(
-      safeNumber(data.factura_id),
-      safeValue(data.desc_descuento),
-      safeNumber(data.monto_descuento)
+    return db.prepare(`INSERT INTO factura_descuentos (factura_id, desc_descuento, monto_descuento) VALUES (?, ?, ?)`).run(
+      safeNumber(data.factura_id), safeValue(data.desc_descuento), safeNumber(data.monto_descuento)
     ).lastInsertRowid;
   }
 

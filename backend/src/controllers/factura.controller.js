@@ -14,145 +14,96 @@ function safeNumber(value, defaultValue = 0) {
   return num;
 }
 
-// Helper para normalizar fechas recibidas del frontend
-// Convierte cualquier formato a ISO completo (YYYY-MM-DDTHH:mm:ss.sssZ)
-function normalizarFechaISO(fechaStr) {
-  if (!fechaStr) return null;
-
-  // Si ya es formato ISO completo, devolver tal cual
-  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(fechaStr)) {
-    return fechaStr;
-  }
-
-  // Si es YYYY-MM-DD, convertir a ISO completo (mediodia UTC)
-  if (/^\d{4}-\d{2}-\d{2}$/.test(fechaStr)) {
-    return `${fechaStr}T12:00:00.000Z`;
-  }
-
-  // Si es otro formato, intentar convertir
-  if (typeof fechaStr === 'string') {
-    const match = fechaStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
-    if (match) {
-      return `${match[1]}-${match[2]}-${match[3]}T12:00:00.000Z`;
-    }
-  }
-
+function normalizarFechaISO(fechaInput) {
+  if (!fechaInput) return null;
+  if (fechaInput instanceof Date) return fechaInput.toISOString();
+  const fechaStr = String(fechaInput).trim();
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(fechaStr)) return fechaStr;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(fechaStr)) return `${fechaStr}T12:00:00.000Z`;
+  const match = fechaStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (match) return `${match[1]}-${match[2]}-${match[3]}T12:00:00.000Z`;
+  try { const d = new Date(fechaStr); if (!isNaN(d.getTime())) return d.toISOString(); } catch (e) {}
   return fechaStr;
 }
 
 export const FacturaController = {
-  // Crear nueva factura
   async crear(req, res, next) {
     try {
       const factura = await FacturaService.crearFactura(req.body);
-      res.status(201).json({
-        success: true,
-        message: 'Factura creada exitosamente',
-        data: factura
-      });
-    } catch (error) {
-      next(error);
-    }
+      res.status(201).json({ success: true, message: 'Factura creada exitosamente', data: factura });
+    } catch (error) { next(error); }
   },
 
-  // Obtener todas las facturas (con filtro opcional por fecha)
   async listar(req, res, next) {
     try {
       const { limit = 100, offset = 0, fecha_desde, fecha_hasta } = req.query;
       let facturas;
 
-      if (fecha_desde && fecha_hasta) {
-        // ============================================================
-        // CORREGIDO: Extraer solo YYYY-MM-DD de las fechas recibidas
-        // El input type="date" del frontend envía "2026-06-18"
-        // Pero si viene como ISO completo, también extraemos la fecha
-        // ============================================================
-        const desde = fecha_desde.toString().substring(0, 10);
-        const hasta = fecha_hasta.toString().substring(0, 10);
+      // ============================================================
+      // DIAGNÓSTICO EXTREMO - Loggear TODO
+      // ============================================================
+      logger.info('========== LISTAR FACTURAS ==========');
+      logger.info(`req.query completo: ${JSON.stringify(req.query)}`);
+      logger.info(`fecha_desde raw: ${fecha_desde} (tipo: ${typeof fecha_desde})`);
+      logger.info(`fecha_hasta raw: ${fecha_hasta} (tipo: ${typeof fecha_hasta})`);
+      logger.info(`fecha_desde truthy: ${!!fecha_desde}`);
+      logger.info(`fecha_hasta truthy: ${!!fecha_hasta}`);
 
+      if (fecha_desde && fecha_hasta) {
+        const desde = String(fecha_desde).substring(0, 10);
+        const hasta = String(fecha_hasta).substring(0, 10);
+
+        logger.info(`Filtro ACTIVADO`);
         logger.info(`Filtro fechas recibidas: desde=${fecha_desde}, hasta=${fecha_hasta}`);
         logger.info(`Filtro fechas normalizadas: desde=${desde}, hasta=${hasta}`);
 
-        facturas = FacturaModel.findByDateRange(
-          desde,
-          hasta,
-          parseInt(limit),
-          parseInt(offset)
-        );
+        facturas = FacturaModel.findByDateRange(desde, hasta, parseInt(limit), parseInt(offset));
       } else {
-        // Listar todas
+        logger.info(`Filtro INACTIVO - listando TODAS`);
         facturas = FacturaModel.findAll(parseInt(limit), parseInt(offset));
       }
 
-      res.json({
-        success: true,
-        count: facturas.length,
-        data: facturas
-      });
-    } catch (error) {
-      next(error);
-    }
+      logger.info(`Total facturas devueltas: ${facturas.length}`);
+      logger.info('=====================================');
+
+      res.json({ success: true, count: facturas.length, data: facturas });
+    } catch (error) { next(error); }
   },
 
-  // Obtener factura por ID con todos sus detalles
   async obtenerPorId(req, res, next) {
     try {
       const { id } = req.params;
       const factura = await FacturaService.obtenerFacturaCompleta(parseInt(id));
-
-      if (!factura) {
-        return res.status(404).json({
-          success: false,
-          message: 'Factura no encontrada'
-        });
-      }
-
-      res.json({
-        success: true,
-        data: factura
-      });
-    } catch (error) {
-      next(error);
-    }
+      if (!factura) return res.status(404).json({ success: false, message: 'Factura no encontrada' });
+      res.json({ success: true, data: factura });
+    } catch (error) { next(error); }
   },
 
-  // ========== ACTUALIZAR FACTURA - CORREGIDO ==========
   async actualizar(req, res, next) {
     try {
       const { id } = req.params;
       const body = req.body;
-
       const factura = FacturaModel.findById(parseInt(id));
-      if (!factura) {
-        return res.status(404).json({
-          success: false,
-          message: 'Factura no encontrada'
-        });
-      }
-
-      // No permitir modificar facturas ya enviadas
-      if (factura.enviada) {
-        return res.status(400).json({
-          success: false,
-          message: 'No se puede modificar una factura ya enviada a EBI'
-        });
-      }
+      if (!factura) return res.status(404).json({ success: false, message: 'Factura no encontrada' });
+      if (factura.enviada) return res.status(400).json({ success: false, message: 'No se puede modificar una factura ya enviada a EBI' });
 
       const db = getDatabase();
-
-      // Separar datos de la factura de items y formas de pago
       const { items, formas_pago, ...facturaData } = body;
 
-      // Datos de la factura principal (solo campos que existen en la tabla)
+      const fechaEmisionNormalizada = normalizarFechaISO(facturaData.fecha_emision) || factura.fecha_emision;
+      const fechaSalidaNormalizada = normalizarFechaISO(facturaData.fecha_salida) || factura.fecha_salida;
+
+      logger.info(`UPDATE fecha_emision: original=${facturaData.fecha_emision} -> normalizada=${fechaEmisionNormalizada}`);
+      logger.info(`UPDATE fecha_salida: original=${facturaData.fecha_salida} -> normalizada=${fechaSalidaNormalizada}`);
+
       const updates = {
         numero_documento_fiscal: safeValue(facturaData.numero_documento_fiscal, factura.numero_documento_fiscal),
         punto_facturacion_fiscal: safeValue(facturaData.punto_facturacion_fiscal, factura.punto_facturacion_fiscal),
         codigo_sucursal_emisor: safeValue(facturaData.codigo_sucursal_emisor, factura.codigo_sucursal_emisor),
         tipo_emision: safeValue(facturaData.tipo_emision, factura.tipo_emision),
         tipo_documento: safeValue(facturaData.tipo_documento, factura.tipo_documento),
-        // CORREGIDO: Guardar fecha en formato ISO completo
-        fecha_emision: normalizarFechaISO(safeValue(facturaData.fecha_emision, factura.fecha_emision)),
-        fecha_salida: normalizarFechaISO(safeValue(facturaData.fecha_salida, factura.fecha_salida)),
+        fecha_emision: fechaEmisionNormalizada,
+        fecha_salida: fechaSalidaNormalizada,
         naturaleza_operacion: safeValue(facturaData.naturaleza_operacion, factura.naturaleza_operacion),
         tipo_operacion: safeValue(facturaData.tipo_operacion, factura.tipo_operacion),
         destino_operacion: safeValue(facturaData.destino_operacion, factura.destino_operacion),
@@ -193,224 +144,105 @@ export const FacturaController = {
         total_otros_gastos: safeNumber(facturaData.total_otros_gastos, factura.total_otros_gastos)
       };
 
-      // Transaccion para integridad
       const updateFactura = db.transaction(() => {
-        // 1. Actualizar factura principal
         const fields = Object.keys(updates).map(key => `${key} = ?`).join(', ');
         const values = Object.values(updates);
         const stmt = db.prepare(`UPDATE facturas SET ${fields}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`);
         stmt.run(...values, parseInt(id));
-
-        // 2. Eliminar items antiguos
         FacturaItemModel.deleteByFacturaId(parseInt(id));
-
-        // 3. Insertar nuevos items
         if (items && Array.isArray(items) && items.length > 0) {
-          for (const item of items) {
-            FacturaItemModel.create({
-              ...item,
-              factura_id: parseInt(id)
-            });
-          }
+          for (const item of items) { FacturaItemModel.create({ ...item, factura_id: parseInt(id) }); }
         }
-
-        // 4. Eliminar formas de pago antiguas
         FacturaFormaPagoModel.deleteByFacturaId(parseInt(id));
-
-        // 5. Insertar nuevas formas de pago
         if (formas_pago && Array.isArray(formas_pago) && formas_pago.length > 0) {
-          for (const fp of formas_pago) {
-            FacturaFormaPagoModel.create({
-              ...fp,
-              factura_id: parseInt(id)
-            });
-          }
+          for (const fp of formas_pago) { FacturaFormaPagoModel.create({ ...fp, factura_id: parseInt(id) }); }
         }
-
         return true;
       });
-
       updateFactura();
 
       logger.info(`Factura ${id} actualizada correctamente`);
-
-      res.json({
-        success: true,
-        message: 'Factura actualizada exitosamente',
-        data: { id: parseInt(id) }
-      });
+      res.json({ success: true, message: 'Factura actualizada exitosamente', data: { id: parseInt(id) } });
     } catch (error) {
       logger.error(`Error actualizando factura ${req.params.id}:`, error);
       next(error);
     }
   },
 
-  // Eliminar factura
   async eliminar(req, res, next) {
     try {
       const { id } = req.params;
-
       const factura = FacturaModel.findById(parseInt(id));
-      if (!factura) {
-        return res.status(404).json({
-          success: false,
-          message: 'Factura no encontrada'
-        });
-      }
-
-      // No permitir eliminar facturas ya enviadas
-      if (factura.enviada) {
-        return res.status(400).json({
-          success: false,
-          message: 'No se puede eliminar una factura ya enviada a EBI'
-        });
-      }
-
-      // Eliminar items relacionados
+      if (!factura) return res.status(404).json({ success: false, message: 'Factura no encontrada' });
+      if (factura.enviada) return res.status(400).json({ success: false, message: 'No se puede eliminar una factura ya enviada a EBI' });
       FacturaItemModel.deleteByFacturaId(parseInt(id));
-
-      // Eliminar formas de pago relacionadas
       FacturaFormaPagoModel.deleteByFacturaId(parseInt(id));
-
       const deleted = FacturaModel.delete(parseInt(id));
-
-      res.json({
-        success: true,
-        message: 'Factura eliminada exitosamente',
-        data: { deleted }
-      });
-    } catch (error) {
-      next(error);
-    }
+      res.json({ success: true, message: 'Factura eliminada exitosamente', data: { deleted } });
+    } catch (error) { next(error); }
   },
 
-  // ========== OPERACIONES EBI ==========
-
-  // Enviar factura a EBI
   async enviarEBI(req, res, next) {
     try {
       const { id } = req.params;
       const resultado = await FacturaService.enviarEBI(parseInt(id));
-
-      res.json({
-        success: resultado.success,
-        message: resultado.mensaje || 'Operacion completada',
-        data: resultado
-      });
-    } catch (error) {
-      next(error);
-    }
+      res.json({ success: resultado.success, message: resultado.mensaje || 'Operacion completada', data: resultado });
+    } catch (error) { next(error); }
   },
 
-  // Consultar estado en EBI
   async consultarEstado(req, res, next) {
     try {
       const { id } = req.params;
       const resultado = await FacturaService.consultarEstadoEBI(parseInt(id));
-
-      res.json({
-        success: resultado.success,
-        message: resultado.mensaje || 'Estado consultado',
-        data: resultado
-      });
-    } catch (error) {
-      next(error);
-    }
+      res.json({ success: resultado.success, message: resultado.mensaje || 'Estado consultado', data: resultado });
+    } catch (error) { next(error); }
   },
 
-  // Anular factura
   async anular(req, res, next) {
     try {
       const { id } = req.params;
       const { motivo } = req.body;
-
-      if (!motivo) {
-        return res.status(400).json({
-          success: false,
-          message: 'El motivo de anulacion es requerido'
-        });
-      }
-
+      if (!motivo) return res.status(400).json({ success: false, message: 'El motivo de anulacion es requerido' });
       const resultado = await FacturaService.anularFactura(parseInt(id), motivo);
-
-      res.json({
-        success: resultado.success,
-        message: resultado.mensaje || 'Anulacion procesada',
-        data: resultado
-      });
-    } catch (error) {
-      next(error);
-    }
+      res.json({ success: resultado.success, message: resultado.mensaje || 'Anulacion procesada', data: resultado });
+    } catch (error) { next(error); }
   },
 
-  // Descargar XML
   async descargarXML(req, res, next) {
     try {
       const { id } = req.params;
       const resultado = await FacturaService.descargarXML(parseInt(id));
-
       if (resultado.success && resultado.documento) {
         const buffer = Buffer.from(resultado.documento, 'base64');
         res.setHeader('Content-Type', 'application/xml');
         res.setHeader('Content-Disposition', `attachment; filename=factura_${id}.xml`);
         return res.send(buffer);
       }
-
-      res.json({
-        success: resultado.success,
-        message: resultado.mensaje || 'Descarga procesada',
-        data: resultado
-      });
-    } catch (error) {
-      next(error);
-    }
+      res.json({ success: resultado.success, message: resultado.mensaje || 'Descarga procesada', data: resultado });
+    } catch (error) { next(error); }
   },
 
-  // Descargar PDF
   async descargarPDF(req, res, next) {
     try {
       const { id } = req.params;
       const resultado = await FacturaService.descargarPDF(parseInt(id));
-
       if (resultado.success && resultado.documento) {
         const buffer = Buffer.from(resultado.documento, 'base64');
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `attachment; filename=factura_${id}.pdf`);
         return res.send(buffer);
       }
-
-      res.json({
-        success: resultado.success,
-        message: resultado.mensaje || 'Descarga procesada',
-        data: resultado
-      });
-    } catch (error) {
-      next(error);
-    }
+      res.json({ success: resultado.success, message: resultado.mensaje || 'Descarga procesada', data: resultado });
+    } catch (error) { next(error); }
   },
 
-  // Enviar por correo
   async enviarCorreo(req, res, next) {
     try {
       const { id } = req.params;
       const { correo } = req.body;
-
-      if (!correo) {
-        return res.status(400).json({
-          success: false,
-          message: 'El correo electronico es requerido'
-        });
-      }
-
+      if (!correo) return res.status(400).json({ success: false, message: 'El correo electronico es requerido' });
       const resultado = await FacturaService.enviarCorreo(parseInt(id), correo);
-
-      res.json({
-        success: resultado.success,
-        message: resultado.mensaje || 'Correo enviado',
-        data: resultado
-      });
-    } catch (error) {
-      next(error);
-    }
+      res.json({ success: resultado.success, message: resultado.mensaje || 'Correo enviado', data: resultado });
+    } catch (error) { next(error); }
   }
 };
